@@ -1,12 +1,15 @@
 import argparse
 import os
+import sys
+import time
+import logging
 import torch
 import torch.backends
 from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
-from exp.exp_imputation import Exp_Imputation
-from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
-from exp.exp_anomaly_detection import Exp_Anomaly_Detection
-from exp.exp_classification import Exp_Classification
+# from exp.exp_imputation import Exp_Imputation
+# from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
+# from exp.exp_anomaly_detection import Exp_Anomaly_Detection
+# from exp.exp_classification import Exp_Classification
 from utils.print_args import print_args
 import random
 import numpy as np
@@ -26,6 +29,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
     parser.add_argument('--model', type=str, required=True, default='Autoformer',
                         help='model name, options: [Autoformer, Transformer, TimesNet]')
+    
+    parser.add_argument('--setting', type=str, help='setting name')
 
     # data loader
     parser.add_argument('--data', type=str, required=True, default='ETTh1', help='dataset type')
@@ -37,6 +42,9 @@ if __name__ == '__main__':
     parser.add_argument('--freq', type=str, default='h',
                         help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
+    
+    parser.add_argument('--freq_per_second', type=int, default=1000,)
+    parser.add_argument('--rolling_window_stride', type=int, default=100)
 
     # forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
@@ -156,20 +164,35 @@ if __name__ == '__main__':
         device_ids = args.devices.split(',')
         args.device_ids = [int(id_) for id_ in device_ids]
         args.gpu = args.device_ids[0]
+        
+        
+    path = os.path.join(args.checkpoints, args.setting)
+    if os.path.exists(path):
+        # stop training if os.path.dirname(model_save_path) exists
+        print(f"{path} exists, stop training")
+        sys.exit(0)
+    if not os.path.exists(path):
+        os.makedirs(path)
+        
+    log_path = os.path.join(path, f'{time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())}.log')
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+    logger = logging.getLogger()
+    logger.addHandler(logging.FileHandler(log_path))
 
-    print('Args in experiment:')
+    logger.info('Args in experiment:')
     print_args(args)
+    logger.info(args)
 
     if args.task_name == 'long_term_forecast':
         Exp = Exp_Long_Term_Forecast
-    elif args.task_name == 'short_term_forecast':
-        Exp = Exp_Short_Term_Forecast
-    elif args.task_name == 'imputation':
-        Exp = Exp_Imputation
-    elif args.task_name == 'anomaly_detection':
-        Exp = Exp_Anomaly_Detection
-    elif args.task_name == 'classification':
-        Exp = Exp_Classification
+    # elif args.task_name == 'short_term_forecast':
+    #     Exp = Exp_Short_Term_Forecast
+    # elif args.task_name == 'imputation':
+    #     Exp = Exp_Imputation
+    # elif args.task_name == 'anomaly_detection':
+    #     Exp = Exp_Anomaly_Detection
+    # elif args.task_name == 'classification':
+    #     Exp = Exp_Classification
     else:
         Exp = Exp_Long_Term_Forecast
 
@@ -177,32 +200,32 @@ if __name__ == '__main__':
         for ii in range(args.itr):
             # setting record of experiments
             exp = Exp(args)  # set experiments
-            setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
-                args.task_name,
-                args.model_id,
-                args.model,
-                args.data,
-                args.features,
-                args.seq_len,
-                args.label_len,
-                args.pred_len,
-                args.d_model,
-                args.n_heads,
-                args.e_layers,
-                args.d_layers,
-                args.d_ff,
-                args.expand,
-                args.d_conv,
-                args.factor,
-                args.embed,
-                args.distil,
-                args.des, ii)
+            # args.setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
+            #     args.task_name,
+            #     args.model_id,
+            #     args.model,
+            #     args.data,
+            #     args.features,
+            #     args.seq_len,
+            #     args.label_len,
+            #     args.pred_len,
+            #     args.d_model,
+            #     args.n_heads,
+            #     args.e_layers,
+            #     args.d_layers,
+            #     args.d_ff,
+            #     args.expand,
+            #     args.d_conv,
+            #     args.factor,
+            #     args.embed,
+            #     args.distil,
+            #     args.des, ii)
 
-            print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-            exp.train(setting)
+            logger.info('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(args.setting))
+            exp.train(args.setting, logger)
 
-            print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.test(setting)
+            # print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.setting))
+            # exp.test(args.setting)
             if args.gpu_type == 'mps':
                 torch.backends.mps.empty_cache()
             elif args.gpu_type == 'cuda':
@@ -210,29 +233,29 @@ if __name__ == '__main__':
     else:
         exp = Exp(args)  # set experiments
         ii = 0
-        setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
-            args.task_name,
-            args.model_id,
-            args.model,
-            args.data,
-            args.features,
-            args.seq_len,
-            args.label_len,
-            args.pred_len,
-            args.d_model,
-            args.n_heads,
-            args.e_layers,
-            args.d_layers,
-            args.d_ff,
-            args.expand,
-            args.d_conv,
-            args.factor,
-            args.embed,
-            args.distil,
-            args.des, ii)
+        # args.setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
+        #     args.task_name,
+        #     args.model_id,
+        #     args.model,
+        #     args.data,
+        #     args.features,
+        #     args.seq_len,
+        #     args.label_len,
+        #     args.pred_len,
+        #     args.d_model,
+        #     args.n_heads,
+        #     args.e_layers,
+        #     args.d_layers,
+        #     args.d_ff,
+        #     args.expand,
+        #     args.d_conv,
+        #     args.factor,
+        #     args.embed,
+        #     args.distil,
+        #     args.des, ii)
 
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting, test=1)
+        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(args.setting))
+        exp.test(args.setting, test=1)
         if args.gpu_type == 'mps':
             torch.backends.mps.empty_cache()
         elif args.gpu_type == 'cuda':
