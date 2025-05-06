@@ -33,6 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--setting', type=str, help='setting name')
 
     # data loader
+    parser.add_argument('--dataset_class', type=str, default='timeSeriesDataset', help='dataset class')
     parser.add_argument('--data', type=str, required=True, default='ETTh1', help='dataset type')
     parser.add_argument('--root_path', type=str, default='./data/ETT/', help='root path of the data file')
     parser.add_argument('--data_path', type=str, default='ETTh1.csv', help='data file')
@@ -42,6 +43,8 @@ if __name__ == '__main__':
     parser.add_argument('--freq', type=str, default='h',
                         help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
+    
+    parser.add_argument('--target_size', type=int, default=1, help='target size')
     
     parser.add_argument('--freq_per_second', type=int, default=1000,)
     parser.add_argument('--rolling_window_stride', type=int, default=100)
@@ -172,7 +175,7 @@ if __name__ == '__main__':
         print(f"{path} exists, stop training")
         sys.exit(0)
     if not os.path.exists(path):
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         
     log_path = os.path.join(path, f'{time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())}.log')
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)

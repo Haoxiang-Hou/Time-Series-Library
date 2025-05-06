@@ -10,6 +10,7 @@ task_name=long_term_forecast
 is_training=1
 model_name=Autoformer
 data=CMEES
+dataset_class=timeSeriesDataset
 features=M
 enc_in=1
 dec_in=1
@@ -50,8 +51,8 @@ for freq_per_second in 1000 100 10; do
                     model_id=${exp_name}
                     # exp_name=test
 
-                    echo python -u run.py --task_name $task_name --is_training $is_training --model $model_name --data $data --features $features --enc_in $enc_in --dec_in $dec_in --c_out $c_out --des "$des" --itr $itr --freq_per_second $freq_per_second --seq_len $seq_len --label_len $label_len --pred_len $pred_len --d_model $d_model --d_ff $d_ff --n_heads $n_heads --e_layers $e_layers --d_layers $d_layers --factor $factor --moving_avg $moving_avg --model_id $model_id --setting $exp_name --train_epochs $train_epochs --rolling_window_stride $rolling_window_stride --learning_rate $learning_rate --batch_size $batch_size
-                    python -u run.py --task_name $task_name --is_training $is_training --model $model_name --data $data --features $features --enc_in $enc_in --dec_in $dec_in --c_out $c_out --des "$des" --itr $itr --freq_per_second $freq_per_second --seq_len $seq_len --label_len $label_len --pred_len $pred_len --d_model $d_model --d_ff $d_ff --n_heads $n_heads --e_layers $e_layers --d_layers $d_layers --factor $factor --moving_avg $moving_avg --model_id $model_id --setting $exp_name --train_epochs $train_epochs --rolling_window_stride $rolling_window_stride --learning_rate $learning_rate --batch_size $batch_size
+                    echo python -u run.py --task_name $task_name --is_training $is_training --model $model_name --data $data --dataset_class $dataset_class --features $features --enc_in $enc_in --dec_in $dec_in --c_out $c_out --des "$des" --itr $itr --freq_per_second $freq_per_second --seq_len $seq_len --label_len $label_len --pred_len $pred_len --d_model $d_model --d_ff $d_ff --n_heads $n_heads --e_layers $e_layers --d_layers $d_layers --factor $factor --moving_avg $moving_avg --model_id $model_id --setting $exp_name --train_epochs $train_epochs --rolling_window_stride $rolling_window_stride --learning_rate $learning_rate --batch_size $batch_size
+                    python -u run.py --task_name $task_name --is_training $is_training --model $model_name --data $data --dataset_class $dataset_class --features $features --enc_in $enc_in --dec_in $dec_in --c_out $c_out --des "$des" --itr $itr --freq_per_second $freq_per_second --seq_len $seq_len --label_len $label_len --pred_len $pred_len --d_model $d_model --d_ff $d_ff --n_heads $n_heads --e_layers $e_layers --d_layers $d_layers --factor $factor --moving_avg $moving_avg --model_id $model_id --setting $exp_name --train_epochs $train_epochs --rolling_window_stride $rolling_window_stride --learning_rate $learning_rate --batch_size $batch_size
                 done
             done
         done
