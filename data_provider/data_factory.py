@@ -1,97 +1,13 @@
-# from data_provider.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_Custom, Dataset_M4, PSMSegLoader, \
-#     MSLSegLoader, SMAPSegLoader, SMDSegLoader, SWATSegLoader, UEAloader
-# from data_provider.uea import collate_fn
-# from torch.utils.data import DataLoader
-
-# data_dict = {
-#     'ETTh1': Dataset_ETT_hour,
-#     'ETTh2': Dataset_ETT_hour,
-#     'ETTm1': Dataset_ETT_minute,
-#     'ETTm2': Dataset_ETT_minute,
-#     'custom': Dataset_Custom,
-#     'm4': Dataset_M4,
-#     'PSM': PSMSegLoader,
-#     'MSL': MSLSegLoader,
-#     'SMAP': SMAPSegLoader,
-#     'SMD': SMDSegLoader,
-#     'SWAT': SWATSegLoader,
-#     'UEA': UEAloader
-# }
-
-
-# def data_provider(args, flag):
-#     Data = data_dict[args.data]
-#     timeenc = 0 if args.embed != 'timeF' else 1
-
-#     shuffle_flag = False if (flag == 'test' or flag == 'TEST') else True
-#     drop_last = False
-#     batch_size = args.batch_size
-#     freq = args.freq
-
-#     if args.task_name == 'anomaly_detection':
-#         drop_last = False
-#         data_set = Data(
-#             args = args,
-#             root_path=args.root_path,
-#             win_size=args.seq_len,
-#             flag=flag,
-#         )
-#         print(flag, len(data_set))
-#         data_loader = DataLoader(
-#             data_set,
-#             batch_size=batch_size,
-#             shuffle=shuffle_flag,
-#             num_workers=args.num_workers,
-#             drop_last=drop_last)
-#         return data_set, data_loader
-#     elif args.task_name == 'classification':
-#         drop_last = False
-#         data_set = Data(
-#             args = args,
-#             root_path=args.root_path,
-#             flag=flag,
-#         )
-
-#         data_loader = DataLoader(
-#             data_set,
-#             batch_size=batch_size,
-#             shuffle=shuffle_flag,
-#             num_workers=args.num_workers,
-#             drop_last=drop_last,
-#             collate_fn=lambda x: collate_fn(x, max_len=args.seq_len)
-#         )
-#         return data_set, data_loader
-#     else:
-#         if args.data == 'm4':
-#             drop_last = False
-#         data_set = Data(
-#             args = args,
-#             root_path=args.root_path,
-#             data_path=args.data_path,
-#             flag=flag,
-#             size=[args.seq_len, args.label_len, args.pred_len],
-#             features=args.features,
-#             target=args.target,
-#             timeenc=timeenc,
-#             freq=freq,
-#             seasonal_patterns=args.seasonal_patterns
-#         )
-#         print(flag, len(data_set))
-#         data_loader = DataLoader(
-#             data_set,
-#             batch_size=batch_size,
-#             shuffle=shuffle_flag,
-#             num_workers=args.num_workers,
-#             drop_last=drop_last)
-#         return data_set, data_loader
-
 import mycode.dataset as dataset
 
 import os
 import glob
 
 import numpy as np
+import json
+
 import torch
+from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 
@@ -151,49 +67,6 @@ class timeSeriesDataset(dataset.FeatureInterpolatPriceSeries):
                          interpolat_freq_per_second=1000)
         
         
-    # def load_data(self, data_path_idx):
-    #     if self._data_path_idx == data_path_idx:
-    #         return 
-        
-    #     if data_path_idx >= len(self.feature_paths):
-    #         raise IndexError("Index out of range")
-        
-    #     # load data
-    #     # _feature_data = np.load(self.feature_paths[data_path_idx]) # [data_len, feature_dim]
-    #     _snapshot_data = np.load(self.snapshot_paths[data_path_idx]) # [data_len, snapshot_dim]
-    #     _interpolated_mid_prices = np.load(self.interpolated_mid_prices_paths[data_path_idx]) # [data_len, snapshot_dim]
-        
-    #     # assert _feature_data.shape[0] == _snapshot_data.shape[0], f"feature data shape: {_feature_data.shape}, snapshot data shape: {_snapshot_data.shape}"
-        
-    #     # # remove timestamp
-    #     # self._feature_data = _feature_data[:, 1:]
-    #     self._snapshot_data = _snapshot_data[:, 1:]
-    #     self._time_stamps = _snapshot_data[:, 0]
-    #     self._interpolated_time_stamps = _interpolated_mid_prices[:, 0]
-    #     self._interpolated_mid_prices = _interpolated_mid_prices[:, 1]
-    #     # convert to float32
-    #     # self._feature_data = self._feature_data.astype(np.float32)
-    #     self._snapshot_data = self._snapshot_data.astype(np.float32)
-    #     # self._time_stamps = self._time_stamps.astype(np.float32)
-    #     # self._interpolated_time_stamps = self._interpolated_time_stamps.astype(np.float32)
-    #     self._interpolated_mid_prices = self._interpolated_mid_prices.astype(np.float32)
-    #     # normalize
-    #     # self._feature_data = (self._feature_data - self.feature_mean) / self.feature_std
-    #     self._snapshot_data = (self._snapshot_data - self.snapshot_mean) / self.snapshot_std
-    #     self._interpolated_mid_prices = (self._interpolated_mid_prices - self.mid_price_mean) / self.mid_price_std
-    #     # padding
-    #     # self._feature_data = np.pad(self._feature_data, ((self.history_seq_len, self.future_pre_len), (0, 0)), mode='constant', constant_values=self.padding_value)
-    #     self._snapshot_data = np.pad(self._snapshot_data, ((self.history_seq_len, self.future_pre_len), (0, 0)), mode='edge')
-    #     self._time_stamps = np.pad(self._time_stamps, ((self.history_seq_len, self.future_pre_len),), mode='edge')
-    #     self._interpolated_time_stamps = np.pad(self._interpolated_time_stamps, ((self.history_seq_len, self.future_pre_len),), mode='edge')
-    #     self._interpolated_mid_prices = np.pad(self._interpolated_mid_prices, ((self.history_seq_len, self.future_pre_len),), mode='edge')
-        
-    #     # update data path index
-    #     self._data_path_idx = data_path_idx
-        
-    #     # return self._feature_data, self._snapshot_data, self._time_stamps, self._interpolated_time_stamps, self._interpolated_mid_prices
-        
-        
     def __getitem__(self, idx):
         data_path_idx, data_idx = self.get_idx(idx)
         self.load_data(data_path_idx)
@@ -234,9 +107,185 @@ class timeSeriesDataset(dataset.FeatureInterpolatPriceSeries):
     
 
 
+
+class LastHistoryMidPriceSeriesDataset(dataset.FeatureLastHistoryMidPriceSeries):
+    def __init__(self, data_dir_path, preprocess_stats_path, date_list, rolling_window_stride, padding_value, history_seq_len=96, history_label_len=48, future_pre_len=96, freq_per_second=100):
+        self.x_seq_len = history_seq_len
+        self.y_label_len = history_label_len
+        self.y_pred_len = future_pre_len
+        
+        self.freq_per_second = freq_per_second
+        # assert 1000 % self.freq_per_second == 0, f"freq_per_second should be a divisor of 1000, but got {self.freq_per_second}"
+        self.sampled_freq = 1
+        
+        
+        super().__init__(data_dir_path=data_dir_path,
+                         preprocess_stats_path=preprocess_stats_path,
+                         date_list=date_list,
+                         rolling_window_stride=rolling_window_stride,
+                         padding_value=padding_value,
+                         history_seq_len=history_seq_len*self.sampled_freq,
+                         history_label_len=history_seq_len*self.sampled_freq, # use history_seq_len of mid prices
+                         future_pre_len=future_pre_len*self.sampled_freq,
+                         freq_per_second=freq_per_second)
+        
+        
+    def __getitem__(self, idx):
+        data_path_idx, data_idx = self.get_idx(idx)
+        self.load_data(data_path_idx)
+            
+        current_idx = data_idx * self.rolling_window_stride
+        
+        # select by last history time stamp 
+        future_idx_list = []
+        _idx = current_idx
+        for i in range(1, self.future_pre_len+1):
+            _expect_next_time = self._time_stamps[current_idx] + self.time_interval*i
+            while _idx+1 < len(self._time_stamps) and self._time_stamps[_idx] <= _expect_next_time:
+                _idx += 1
+            future_idx_list.append(_idx)
+        
+        history_idx_list = []
+        _idx = current_idx
+        for i in range(self.history_seq_len):
+            _expect_next_time = self._time_stamps[current_idx] - self.time_interval*i
+            while _idx-1 >= 0 and self._time_stamps[_idx] > _expect_next_time:
+                _idx -= 1
+            history_idx_list.append(_idx) 
+        history_idx_list = history_idx_list[::-1]
+
+        # select data idx lists
+        # history_feature_seq_idx_list = history_idx_list 
+        history_label_idx_list = history_idx_list[-self.history_label_len:] # [history_label_len]
+        
+        # features = self._feature_data[history_feature_seq_idx_list, :15] # [history_seq_len, feature_dim]
+        labels = self._feature_data[current_idx, -8:] # [8]
+        history_mid_prices = self._mid_prices[history_label_idx_list] # [history_label_len]
+        future_mid_prices = self._mid_prices[future_idx_list] # [future_pre_len]
+        history_time_stamps = self._time_stamps[history_label_idx_list] # [history_label_len]
+        future_time_stamps = self._time_stamps[future_idx_list] # [future_pre_len]
+        
+        history_mid_prices = torch.tensor(history_mid_prices, dtype=torch.float32)
+        future_mid_prices = torch.tensor(future_mid_prices, dtype=torch.float32)
+        history_time_stamps = torch.tensor(history_time_stamps, dtype=torch.float32)
+        future_time_stamps = torch.tensor(future_time_stamps, dtype=torch.float32)
+        
+        seq_x = history_mid_prices
+        seq_y = torch.cat((history_mid_prices[-self.y_label_len:], future_mid_prices), dim=0) # [history_label_len + future_pre_len, 15]
+        seq_x_mark = history_time_stamps
+        seq_y_mark = torch.cat((history_time_stamps[-self.y_label_len:], future_time_stamps), dim=0) # [history_label_len + future_pre_len, 15]
+        
+        # assert len(seq_x) == self.x_seq_len, f"seq_x length: {len(seq_x)}, expected: {self.x_seq_len}"
+        # assert len(seq_y) == self.y_label_len + self.y_pred_len, f"seq_y length: {len(seq_y)}, expected: {self.y_label_len + self.y_pred_len}"
+        # assert len(seq_x_mark) == self.x_seq_len, f"seq_x_mark length: {len(seq_x_mark)}, expected: {self.x_seq_len}"
+        # assert len(seq_y_mark) == self.y_label_len + self.y_pred_len, f"seq_y_mark length: {len(seq_y_mark)}, expected: {self.y_label_len + self.y_pred_len}"
+            
+        seq_x = torch.tensor(seq_x, dtype=torch.float32).unsqueeze(-1)
+        seq_y = torch.tensor(seq_y, dtype=torch.float32).unsqueeze(-1)
+        seq_x_mark = torch.tensor(seq_x_mark, dtype=torch.float32).unsqueeze(-1)
+        seq_y_mark = torch.tensor(seq_y_mark, dtype=torch.float32).unsqueeze(-1)
+        labels = torch.tensor(labels)
+        
+        return seq_x, seq_y, seq_x_mark, seq_y_mark, labels
+    
+    def inverse_transform(self, data):
+        return super().inverse_transform_mid_price(data)
+    
+    
+
+class SelectPriceFeaturesSeriesDataset(dataset.FeatureLastHistoryMidPriceSeries):
+    def __init__(self, data_dir_path, preprocess_stats_path, date_list, rolling_window_stride, padding_value, history_seq_len=96, history_label_len=48, future_pre_len=96, freq_per_second=100):
+        self.x_seq_len = history_seq_len
+        self.y_label_len = history_label_len
+        self.y_pred_len = future_pre_len
+        
+        self.freq_per_second = freq_per_second
+        # assert 1000 % self.freq_per_second == 0, f"freq_per_second should be a divisor of 1000, but got {self.freq_per_second}"
+        self.sampled_freq = 1
+        
+        
+        super().__init__(data_dir_path=data_dir_path,
+                         preprocess_stats_path=preprocess_stats_path,
+                         date_list=date_list,
+                         rolling_window_stride=rolling_window_stride,
+                         padding_value=padding_value,
+                         history_seq_len=history_seq_len*self.sampled_freq,
+                         history_label_len=history_seq_len*self.sampled_freq, # use history_seq_len of mid prices
+                         future_pre_len=future_pre_len*self.sampled_freq,
+                         freq_per_second=freq_per_second)
+        
+        
+    def __getitem__(self, idx):
+        data_path_idx, data_idx = self.get_idx(idx)
+        self.load_data(data_path_idx)
+            
+        current_idx = data_idx * self.rolling_window_stride
+        
+        # select by last history time stamp 
+        future_idx_list = []
+        _idx = current_idx
+        for i in range(1, self.future_pre_len+1):
+            _expect_next_time = self._time_stamps[current_idx] + self.time_interval*i
+            while _idx+1 < len(self._time_stamps) and self._time_stamps[_idx] <= _expect_next_time:
+                _idx += 1
+            future_idx_list.append(_idx)
+        
+        history_idx_list = []
+        _idx = current_idx
+        for i in range(self.history_seq_len):
+            _expect_next_time = self._time_stamps[current_idx] - self.time_interval*i
+            while _idx-1 >= 0 and self._time_stamps[_idx] > _expect_next_time:
+                _idx -= 1
+            history_idx_list.append(_idx) 
+        history_idx_list = history_idx_list[::-1]
+
+        # select data idx lists
+        history_label_idx_list = history_idx_list[-self.history_label_len:] # [history_label_len]
+        
+        features = self._feature_data[history_label_idx_list, :15] # [history_label_len, 15]
+        labels = self._feature_data[current_idx, -8:] # [8]
+        history_mid_prices = self._mid_prices[history_label_idx_list] # [history_label_len]
+        future_mid_prices = self._mid_prices[future_idx_list] # [future_pre_len]
+        history_time_stamps = self._time_stamps[history_label_idx_list] # [history_label_len]
+        future_time_stamps = self._time_stamps[future_idx_list] # [future_pre_len]
+        
+        features = torch.tensor(features, dtype=torch.float32) 
+        history_mid_prices = torch.tensor(history_mid_prices, dtype=torch.float32)
+        future_mid_prices = torch.tensor(future_mid_prices, dtype=torch.float32)
+        history_time_stamps = torch.tensor(history_time_stamps, dtype=torch.float32)
+        future_time_stamps = torch.tensor(future_time_stamps, dtype=torch.float32)
+        
+        history_features_midprices = torch.cat((features, history_mid_prices.unsqueeze(-1)), dim=-1) # [history_label_len, 16]
+        future_features_midprices = torch.cat((torch.zeros((self.future_pre_len, 15)), future_mid_prices.unsqueeze(-1)), dim=-1) # [future_pre_len, 16]
+        
+        seq_x = history_features_midprices
+        seq_y = torch.cat((history_features_midprices[-self.y_label_len:], future_features_midprices), dim=0) # [history_label_len + future_pre_len, 15]
+        seq_x_mark = history_time_stamps
+        seq_y_mark = torch.cat((history_time_stamps[-self.y_label_len:], future_time_stamps), dim=0) # [history_label_len + future_pre_len, 15]
+        
+        # assert len(seq_x) == self.x_seq_len, f"seq_x length: {len(seq_x)}, expected: {self.x_seq_len}"
+        # assert len(seq_y) == self.y_label_len + self.y_pred_len, f"seq_y length: {len(seq_y)}, expected: {self.y_label_len + self.y_pred_len}"
+        # assert len(seq_x_mark) == self.x_seq_len, f"seq_x_mark length: {len(seq_x_mark)}, expected: {self.x_seq_len}"
+        # assert len(seq_y_mark) == self.y_label_len + self.y_pred_len, f"seq_y_mark length: {len(seq_y_mark)}, expected: {self.y_label_len + self.y_pred_len}"
+            
+        seq_x = torch.tensor(seq_x, dtype=torch.float32)
+        seq_y = torch.tensor(seq_y, dtype=torch.float32)
+        seq_x_mark = torch.tensor(seq_x_mark, dtype=torch.float32).unsqueeze(-1)
+        seq_y_mark = torch.tensor(seq_y_mark, dtype=torch.float32).unsqueeze(-1)
+        labels = torch.tensor(labels)
+        
+        return seq_x, seq_y, seq_x_mark, seq_y_mark, labels
+    
+    def inverse_transform(self, data):
+        return super().inverse_transform_mid_price(data)
+    
+
+
 data_dict = {
     'FeatureDataset': FeatureDataset,
-    'timeSeriesDataset': timeSeriesDataset
+    'timeSeriesDataset': timeSeriesDataset,
+    'LastHistoryMidPriceSeriesDataset': LastHistoryMidPriceSeriesDataset,
+    'SelectPriceFeaturesSeriesDataset': SelectPriceFeaturesSeriesDataset,
 }
     
 
@@ -245,8 +294,10 @@ def data_provider(args, flag):
     args.data_path = './data/'
     args.stats_path = './my_exp/stats/CMEES'
     # args.rolling_window_stride = 100
+    if flag == 'train':
+        args.rolling_window_stride = args.train_rolling_window_stride
     if flag == 'val':
-        args.rolling_window_stride = 100
+        args.rolling_window_stride = args.dev_rolling_window_stride
     if flag == 'test':
         args.rolling_window_stride = 1
     
@@ -259,6 +310,8 @@ def data_provider(args, flag):
         test_dates = ['20240528', '20240603', '20240604', '20240605', '20240606', '20240607', '20240610', '20240611', '20240612', '20240613', '20240614', '20240617', '20240618', '20240619', '20240620', '20240621', '20240624', '20240625']
     elif args.data == 'CMEES':
         test_dates = ['20250204', '20250205', '20250206', '20250207', '20250210', '20250211', '20250212']
+        # test_dates = ['20250212']
+
         
     data_dir_path = os.path.join(args.data_path, f"data_{args.data}")
     feature_paths = glob.glob(os.path.join(args.data_path, f"data_{args.data}", f'*_feature.npy'))
@@ -277,7 +330,7 @@ def data_provider(args, flag):
     
     Dataset_class = data_dict[args.dataset_class]
     dataset = Dataset_class(data_dir_path=data_dir_path, preprocess_stats_path=args.stats_path, date_list=date_list, rolling_window_stride=args.rolling_window_stride, padding_value=0, history_seq_len=args.history_seq_len, history_label_len=args.history_label_len, future_pre_len=args.future_pre_len, freq_per_second=args.freq_per_second)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, persistent_workers=True, prefetch_factor=8)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, persistent_workers=True, prefetch_factor=64, pin_memory=True)
     
     return dataset, dataloader
 

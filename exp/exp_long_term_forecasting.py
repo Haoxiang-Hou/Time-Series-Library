@@ -9,6 +9,7 @@ from torch import optim
 import os
 import sys
 import time
+import tqdm
 import logging
 import json
 
@@ -53,7 +54,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         ref_labels = []
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark, labels) in enumerate(vali_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark, labels) in tqdm.tqdm(enumerate(vali_loader), desc='Validation', total=len(vali_loader)):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
@@ -80,14 +81,14 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 total_loss.append(loss)
                 
                 if self.args.target_size==1: # output is mid price seq
-                    current_last_midprice = batch_y[:, -self.args.pred_len, -1].unsqueeze(-1).detach().cpu() # shape: [batch_size, 1]
-                    # assert current_last_midprice.shape == (batch_x.shape[0], 1), f"current_last_midprice shape: {current_last_midprice.shape}, batch_x shape: {batch_x.shape}"
-                    pre_future_midprices = pred.squeeze(-1) # shape: [batch_size, pred_len]
-                    # assert pre_future_midprices.shape == (batch_x.shape[0], self.args.pred_len), f"pred shape: {pred.shape}, batch_x shape: {batch_x.shape}"
+                    current_last_midprice = batch_x[:, -1, -1].unsqueeze(-1).detach().cpu() # shape: [batch_size, 1]
+                    
+                    pre_future_midprices = torch.cat([current_last_midprice, pred.squeeze(-1)], dim=1) # shape: [batch_size, pred_len+1]
+                    true = torch.cat([current_last_midprice, true.squeeze(-1)], dim=1) # shape: [batch_size, pred_len+1]
                     
                     pre_label = ic_compute.compute_label_from_pre_future_midprice_with_index(current_last_midprice, pre_future_midprices, raw_time_intervals=[0.5, 1, 3, 5, 10, 20, 60, 120], time_index_factor=self.args.freq_per_second, transform_func=vali_data.inverse_transform)
                     
-                    interpolat_price_label = ic_compute.compute_label_from_pre_future_midprice_with_index(current_last_midprice, true.squeeze(-1), raw_time_intervals=[0.5, 1, 3, 5, 10, 20, 60, 120], time_index_factor=self.args.freq_per_second, transform_func=vali_data.inverse_transform)
+                    interpolat_price_label = ic_compute.compute_label_from_pre_future_midprice_with_index(current_last_midprice, true, raw_time_intervals=[0.5, 1, 3, 5, 10, 20, 60, 120], time_index_factor=self.args.freq_per_second, transform_func=vali_data.inverse_transform)
                     
                     # assert pre_label.shape == (batch_x.shape[0], 8), f"pre_label shape: {pre_label.shape}, batch_x shape: {batch_x.shape}"
                     # assert interpolat_price_label.shape == (batch_x.shape[0], 8), f"interpolat_price_label shape: {interpolat_price_label.shape}, batch_x shape: {batch_x.shape}"
@@ -109,12 +110,12 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         interpolat_price_labels = np.concatenate(interpolat_price_labels, axis=0) # [num_windows, 8]
         ref_labels = np.concatenate(ref_labels, axis=0) # [num_windows, 8]
         
-        ic_pre_interpolat_price = ic_compute.get_ic(pre_labels, interpolat_price_labels)
+        ic_pre_price = ic_compute.get_ic(pre_labels, interpolat_price_labels)
         ic_pre_ref = ic_compute.get_ic(pre_labels, ref_labels)
-        ic_interpolat_price_ref = ic_compute.get_ic(interpolat_price_labels, ref_labels)
+        ic_price_ref = ic_compute.get_ic(interpolat_price_labels, ref_labels)
         
         self.model.train()
-        return total_loss, ic_pre_interpolat_price, ic_pre_ref, ic_interpolat_price_ref
+        return total_loss, ic_pre_price, ic_pre_ref, ic_price_ref
 
     def train(self, setting, logger):
         logger.info(self.model)
@@ -152,7 +153,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark, labels) in enumerate(train_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark, labels) in tqdm.tqdm(enumerate(train_loader), desc='Training', total=len(train_loader)):
                 iter_count += 1
                 model_optim.zero_grad()
                 batch_x = batch_x.float().to(self.device)
@@ -199,17 +200,18 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     loss.backward()
                     model_optim.step()
 
-            logger.info("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
+            logger.info("Epoch: {} train cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
             # vali_loss = self.vali(vali_data, vali_loader, criterion)
             # test_loss = self.vali(test_data, test_loader, criterion)
-            vali_loss, ic_pre_interpolat_price, ic_pre_ref, ic_interpolat_price_ref = self.vali(vali_data, vali_loader, criterion)
+            vali_loss, ic_pre_price, ic_pre_ref, ic_price_ref = self.vali(vali_data, vali_loader, criterion)
+            logger.info("Epoch: {} train + vali cost time: {}".format(epoch + 1, time.time() - epoch_time))
 
             # print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 # epoch + 1, train_steps, train_loss, vali_loss, test_loss))
             logger.info("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss))
-            logger.info(f"Epoch: {epoch + 1}, Steps: {train_steps} | ic_pre_interpolat_price: {json.dumps(ic_pre_interpolat_price)}, ic_pre_ref: {json.dumps(ic_pre_ref)}, ic_interpolat_price_ref: {json.dumps(ic_interpolat_price_ref)}")
+            logger.info(f"Epoch: {epoch + 1}, Steps: {train_steps} | ic_pre_price: {json.dumps(ic_pre_price)}, ic_pre_ref: {json.dumps(ic_pre_ref)}, ic_price_ref: {json.dumps(ic_price_ref)}")
             
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:

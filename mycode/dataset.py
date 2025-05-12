@@ -443,3 +443,166 @@ class FeatureInterpolatPriceSeries(Dataset):
             mid_prices_interpolate = np.pad(mid_prices_interpolate, (0, self.future_pre_len - len(mid_prices_interpolate)), mode='edge')
         
         return time_stamps_interpolate, mid_prices_interpolate
+    
+    
+
+class FeatureLastHistoryMidPriceSeries(Dataset):
+    def __init__(self, data_dir_path, preprocess_stats_path, date_list, rolling_window_stride, padding_value, history_seq_len, history_label_len, future_pre_len, freq_per_second=100):
+        self.feature_paths = [os.path.join(data_dir_path, f"{date}_feature.npy") for date in date_list]
+        self.snapshot_paths = [os.path.join(data_dir_path, f"{date}_snapshot.npy") for date in date_list]
+        
+        self.preprocess_feature_stats_path = os.path.join(preprocess_stats_path, 'feature')
+        self.preprocess_snapshot_stats_path = os.path.join(preprocess_stats_path, 'snapshot')
+        self.preprocess_interpolated_mid_prices_stats_path = os.path.join(preprocess_stats_path, 'interpolated_mid_prices')
+        
+        self.rolling_window_stride = rolling_window_stride
+        self.padding_value = padding_value
+        
+        self.history_seq_len = history_seq_len
+        self.history_label_len = history_label_len
+        self.future_pre_len = future_pre_len
+        
+        self.freq_per_second = freq_per_second
+        self.time_interval = int(1e9 / self.freq_per_second)
+        
+        assert self.history_seq_len >= self.history_label_len, "history_seq_len must be greater than or equal to history_label_len, but got history_seq_len: {}, history_label_len: {}".format(self.history_seq_len, self.history_label_len)
+        
+        
+        # load stats
+        self.feature_mean = np.load(os.path.join(self.preprocess_feature_stats_path, 'mean.npy'))
+        self.feature_std = np.load(os.path.join(self.preprocess_feature_stats_path, 'std.npy'))
+        self.snapshot_mean = np.load(os.path.join(self.preprocess_snapshot_stats_path, 'mean.npy'))
+        self.snapshot_std = np.load(os.path.join(self.preprocess_snapshot_stats_path, 'std.npy'))
+        self.mid_price_mean = np.load(os.path.join(self.preprocess_interpolated_mid_prices_stats_path, 'mean.npy'))
+        self.mid_price_std = np.load(os.path.join(self.preprocess_interpolated_mid_prices_stats_path, 'std.npy'))
+        
+        self.feature_data_len_dict = json.load(open(os.path.join(self.preprocess_feature_stats_path, 'stats.json'), 'r'))
+        
+        # calculate seq_len
+        self.data_len_list = [self.feature_data_len_dict[f] for f in self.feature_paths]
+        self.seq_len_list = []
+        for data_len in self.data_len_list:
+            # after padding, the data length is data_len + history_seq_len - 1
+            # after slicing, (seq_len - 1) * rolling_window_stride + history_seq_len = data_len + history_seq_len - 1
+            # seq_len = (data_len + history_seq_len - 1 - history_seq_len) / rolling_window_stride + 1
+            seq_len = (int((data_len - 1) / self.rolling_window_stride) + 1)
+            self.seq_len_list.append(seq_len)
+            
+        # calculate total seq_len
+        self.seq_len = sum(self.seq_len_list)
+        print(f"total seq_len: {self.seq_len}")
+        print(f"seq_len_list: {self.seq_len_list}")
+        
+        # self.idx_dict = {}
+        # for i in tqdm.tqdm(range(self.seq_len)):
+        #     self.idx_dict[i] = self.get_idx(i)
+        
+        # load data init
+        self._data_path_idx = -1
+        self.load_data(0)
+        
+    def get_idx(self, idx):
+        # get the data path index
+        data_path_idx = 0
+        for i in range(len(self.seq_len_list)):
+            if idx < self.seq_len_list[i]:
+                data_path_idx = i
+                break
+            idx -= self.seq_len_list[i]
+        return data_path_idx, idx
+        
+    def load_data(self, data_path_idx):
+        if self._data_path_idx == data_path_idx:
+            return self._feature_data, self._snapshot_data
+        
+        if data_path_idx >= len(self.feature_paths):
+            raise IndexError("Index out of range")
+        
+        # load data
+        _feature_data = np.load(self.feature_paths[data_path_idx]) # [data_len, feature_dim]
+        _snapshot_data = np.load(self.snapshot_paths[data_path_idx]) # [data_len, snapshot_dim]
+        
+        assert _feature_data.shape[0] == _snapshot_data.shape[0], f"feature data shape: {_feature_data.shape}, snapshot data shape: {_snapshot_data.shape}"
+        
+        # remove timestamp
+        self._feature_data = _feature_data[:, 1:]
+        self._snapshot_data = _snapshot_data[:, 1:]
+        self._time_stamps = _snapshot_data[:, 0]
+        self._mid_prices = _snapshot_data[:, 1:3].mean(axis=1) # [data_len]
+        # convert to float32
+        self._feature_data = self._feature_data.astype(np.float32)
+        self._snapshot_data = self._snapshot_data.astype(np.float32)
+        # self._time_stamps = self._time_stamps.astype(np.float32) # float32 is not enough for nanosecond
+        self._mid_prices = self._mid_prices.astype(np.float32)
+        # normalize
+        self._feature_data = (self._feature_data - self.feature_mean) / self.feature_std
+        # self._snapshot_data = (self._snapshot_data - self.snapshot_mean) / self.snapshot_std
+        self._mid_prices = (self._mid_prices - self.mid_price_mean) / self.mid_price_std
+        # padding
+        # self._feature_data = np.pad(self._feature_data, ((self.history_seq_len, self.future_pre_len), (0, 0)), mode='constant', constant_values=self.padding_value)
+        # # self._snapshot_data = np.pad(self._snapshot_data, ((self.history_seq_len, self.future_pre_len), (0, 0)), mode='edge')
+        # self._time_stamps = np.pad(self._time_stamps, ((self.history_seq_len, self.future_pre_len),), mode='edge')
+        # self._mid_prices = np.pad(self._mid_prices, ((self.history_seq_len, self.future_pre_len),), mode='edge')
+        
+        # update data path index
+        self._data_path_idx = data_path_idx
+        
+        return self._feature_data, self._snapshot_data, self._time_stamps, self._mid_prices
+            
+    def __len__(self):
+        return self.seq_len
+
+    # def __getitem__(self, idx):
+    #     data_path_idx, data_idx = self.get_idx(idx)
+    #     self.load_data(data_path_idx)
+            
+    #     current_idx = data_idx * self.rolling_window_stride
+        
+    #     # select by last history time stamp 
+    #     future_idx_list = []
+    #     _idx = current_idx
+    #     for i in range(1, self.future_pre_len+1):
+    #         while _idx+1 < len(self._time_stamps) and self._time_stamps[_idx+1] <= self._time_stamps[current_idx] + self.time_interval*i:
+    #             _idx += 1
+    #         future_idx_list.append(_idx)
+        
+    #     history_idx_list = []
+    #     _idx = current_idx
+    #     for i in range(self.history_seq_len):
+    #         while _idx-1 >= 0 and self._time_stamps[_idx] > self._time_stamps[current_idx] - self.time_interval*i:
+    #             _idx -= 1
+    #         history_idx_list.append(_idx) 
+    #     history_idx_list = history_idx_list[::-1]
+        
+    #     # select data idx lists
+    #     history_feature_seq_idx_list = history_idx_list 
+    #     history_label_idx_list = history_idx_list[-self.history_label_len:] # [history_label_len]
+        
+    #     # self.history_seq_len = history_seq_len
+    #     # self.history_label_len = history_label_len
+    #     # self.future_pre_len = future_pre_len
+        
+    #     features = self._feature_data[history_feature_seq_idx_list, :15] # [history_seq_len, feature_dim]
+    #     labels = self._feature_data[current_idx, -8:] # [8]
+    #     history_mid_prices = self._mid_prices[history_label_idx_list] # [history_label_len]
+    #     future_mid_prices = self._mid_prices[future_idx_list] # [future_pre_len]
+    #     history_time_stamps = self._time_stamps[history_label_idx_list] # [history_label_len]
+    #     future_time_stamps = self._time_stamps[future_idx_list] # [future_pre_len]
+        
+    #     # convert to tensor
+    #     features = torch.tensor(features)
+    #     labels = torch.tensor(labels)
+    #     history_mid_prices = torch.tensor(history_mid_prices)
+    #     future_mid_prices = torch.tensor(future_mid_prices)
+    #     history_time_stamps = torch.tensor(history_time_stamps)
+    #     future_time_stamps = torch.tensor(future_time_stamps)
+        
+    #     # print(f"history_time_stamps: {history_time_stamps[:10]-history_time_stamps[0]}\n, future_time_stamps: {future_time_stamps[:10]-future_time_stamps[0]}")
+        
+    #     return features, history_mid_prices, history_time_stamps, labels, future_mid_prices, future_time_stamps
+    
+    
+    def inverse_transform_mid_price(self, mid_prices_normalized):
+        mid_prices = mid_prices_normalized * self.mid_price_std + self.mid_price_mean
+        return mid_prices
+    

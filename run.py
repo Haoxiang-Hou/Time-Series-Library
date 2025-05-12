@@ -47,7 +47,8 @@ if __name__ == '__main__':
     parser.add_argument('--target_size', type=int, default=1, help='target size')
     
     parser.add_argument('--freq_per_second', type=int, default=1000,)
-    parser.add_argument('--rolling_window_stride', type=int, default=100)
+    parser.add_argument('--train_rolling_window_stride', type=int, default=100)
+    parser.add_argument('--dev_rolling_window_stride', type=int, default=100)
 
     # forecasting task
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
