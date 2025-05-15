@@ -42,8 +42,43 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
         return model_optim
 
-    def _select_criterion(self):
-        criterion = nn.MSELoss()
+    def _select_criterion(self): 
+        class MaskedMSELoss(nn.Module):
+            def __init__(self, args):
+                super().__init__()
+                self.args = args
+
+                self.mask_select_list = []
+                for _next_time in [0.5, 1, 3, 5, 10, 20, 60, 120]:
+                    _mask_idx = int(_next_time * self.args.freq_per_second) - 1
+                    if _mask_idx < self.args.pred_len:
+                        self.mask_select_list.append(_mask_idx)
+                    else:
+                        self.mask_select_list.append(self.args.pred_len - 1)
+                        break
+                print(f"mask_select_list: {self.mask_select_list}")
+                
+                self.mask = torch.zeros((self.args.pred_len, self.args.target_size), dtype=torch.bool)
+                for idx in self.mask_select_list:
+                    self.mask[idx, :] = True
+                
+                self.MSELoss = nn.MSELoss()
+                
+            def forward(self, input, target):
+                # input/target: [batch, seq, dim]
+                # 只在 idx_list 位置计算 loss
+                _mask = self.mask.unsqueeze(0).expand(input.shape[0], -1, -1) # [batch, pred_len, target_size]
+                input_masked = input[_mask]
+                target_masked = target[_mask]
+                return self.MSELoss(input_masked, target_masked)
+            
+            
+        if self.args.loss_function == 'MSELoss':       
+            criterion = nn.MSELoss()
+        elif self.args.loss_function == 'MaskedMSELoss':
+            criterion = MaskedMSELoss(self.args)
+        else:
+            raise ValueError(f"Loss function {self.args.loss} not supported")
         return criterion
  
 

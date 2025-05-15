@@ -45,6 +45,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
     
     parser.add_argument('--target_size', type=int, default=1, help='target size')
+    parser.add_argument('--loss_function', type=str, default='MSELoss', help='loss function')
     
     parser.add_argument('--freq_per_second', type=int, default=1000,)
     parser.add_argument('--train_rolling_window_stride', type=int, default=100)
